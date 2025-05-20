@@ -1,80 +1,75 @@
 # ClosestProxy
 
-A tiny, no‑frills tool that **discovers free public proxies in your own country and benchmarks them in parallel**.  
-It pulls a fresh list from Proxifly, filters it by geolocation, hand‑shakes each proxy (SOCKS 4/5 or HTTP/S) and prints the fastest working endpoints.
+Find and benchmark **the closest, working public proxy** in seconds.
 
 ---
 
-## ✨ Features
+## ✨ Highlights
 
-| Capability | Details                                                                                                          |
-|------------|------------------------------------------------------------------------------------------------------------------|
-| **Auto‑fetch list** | Downloads <https://github.com/proxifly/free-proxy-list> on first run and caches it as `data.json`.               |
-| **Smart geofilter** | Uses `ifconfig.co` to detect *your* country and keeps only same‑country proxies (lower latency, fewer captchas). |
-| **Multi‑process benchmark** | Spawns a `multiprocessing.Pool` so every CPU core dials proxies concurrently.                                    |
-| **Protocol aware** | Custom handshake routines for **SOCKS5, SOCKS4/4a, HTTP and HTTPS CONNECT**.                                     |
-| **Ping metric** | Measures time to a successful handshake and sorts the winners.                                                   |
-| **Single‑file core** | Only one Python file – `main.py` – no frameworks to fight with.                                                  |
+- **Geolocation-aware**: auto-detects your country (via [ipinfo.io](https://ipinfo.io/)) or lets you specify ISO-3166 codes.
+- **Multi-protocol**: probes HTTP, HTTPS, SOCKS4 & SOCKS5 proxies.
+- **True latency**: measures handshake _and_ a real HTTPS request.
+- **Multiprocess scanning**: uses all CPU cores for speed.
+- **Subnet deduplication**: optional CIDR mask to avoid clustered IPs.
+- **Zero setup**: grabs the latest proxy list from [proxifly/free-proxy-list](https://github.com/proxifly/free-proxy-list) and caches it locally.
 
 ---
 
-## 📦 Installation
+## 🚀 Quick start
 
 ```bash
-# 1. Clone the repo
-$ git clone https://github.com/your‑user/proxy‑benchmark.git && cd proxy‑benchmark
+# 1. Install Python3 dependencies
+python3 -m pip install -r requirements.txt
 
-# 2. Create a virtualenv (recommended)
-$ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+# 2. Run (auto-detects your country)
+python3 closestproxy.py
 
-# 3. Install runtime deps
-$ pip install -r requirements.txt
-# or, if you don’t use a requirements file:
-$ pip install requests tqdm
+# Specify countries (e.g. US & CA)
+python3 closestproxy.py -c US CA
+
+# Deduplicate proxies by /24 subnet
+python3 closestproxy.py -c IT FR -s 24
 ```
 
----
+The script prints the working proxies sorted by ascending latency, e.g.
 
-## 🚀 Usage
-
-```bash
-$ python3 main.py
-Found 67 proxies in your country --> FR
-100%|████████████████████| 67/67 [00:06<00:00, 11.15it/s]
-Found 18 working proxies:
-ProxyInfo(proxy='123.123.0.42:1080', protocol='socks5', ping=0.146, ...)
+```
+> Found 312 proxies in {'IT'}
+> Found 27 working proxies
+> Filtered by netmask=24 -> 12 left
 ...
 ```
 
-That’s it! By default the script:
+---
 
-1. Detects your external IP’s country.
-2. Parses the latest Proxifly proxy list.
-3. Keeps only same‑country entries.
-4. Probes each proxy (5s timeout).
-5. Prints the survivors, fastest first.
+## 🔧 Command-line options
+
+| Flag | Alias | Description |
+|------|-------|-------------|
+| `--country CC [CC ...]` | `-c` | One or more ISO-3166 country codes. Omit to use your detected country. |
+| `--subnet MASK` | `-s` | CIDR mask (0-32) to drop proxies in the same subnet, e.g. `24` for `/24`. |
 
 ---
 
-### `test_proxy` cheatsheet
+## 🛠 How it works
 
-| Function | Purpose                                                                          |
-|----------|----------------------------------------------------------------------------------|
-| `_socks5_handshake` | Sends method‑negotiation (`0x05 0x01 0x00`) and expects `0x05 0x00`.             |
-| `_socks4_handshake` | Issues a CONNECT to `1.1.1.1:80`; success if `CD == 0x5A`.                       |
-| `_http_probe` | Simple `OPTIONS *` request; success if reply begins with `HTTP/1.`.              |
-| `test_proxy` | Wraps the above, records `proxy.ping` on success, leaves it infinity on failure. |
+1. Download or load cached `data.json` (a fresh list of public proxies) in your temp folder.
+2. Filter by desired country codes.
+3. **Parallel probe** each proxy:
+   - Perform protocol-specific handshake (HTTP OPTIONS / SOCKS greeting) to quickly measure latency.
+   - Attempt a real request to [https://www.torproject.org/](https://www.torproject.org/) (they should not block proxies).
+4. Sort and print only the proxies that responded successfully.
 
 ---
 
-## ⚠️ Caveats & Ethics
+## ⚠️ Caveats & ethics
 
-* Public proxies are unreliable and often abused. Never send sensitive data through them.
-* Some endpoints may be compromised or used for MITM. Use TLS end‑to‑end.
-* Always respect the target website’s Terms of Service.
+- Public proxies are often unstable; always validate before production use.
+- Do **not** use this tool for illegal activities. Respect target sites' ToS.
+- Some websites may block known public proxies.
 
 ---
 
 ## 📄 License
 
-This project is released under the **MIT License** – see `LICENSE` for details.
+ClosestProxy is released under the MIT License – see `LICENSE` for details.
