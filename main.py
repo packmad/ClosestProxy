@@ -32,41 +32,44 @@ class ProxyInfo:
     score: int
     ping: float  # infinity for failed connections
     geolocation: Geolocation
-    geo_service: Optional[str]
+    works: bool
 
 
 def geolocation_service(proxy: Optional[ProxyInfo] = None) -> Optional[str]:
-    """
-    Ask ifconfig.co for the country ISO code, optionally through a proxy.
+    return json.loads(get_url("https://ipinfo.io/json", proxy))["country"]
 
-    Returns
-    -------
-    str | None
-        Two-letter ISO country code (e.g. “FR”) or None on error/timeout.
-    """
-    url = "http://ifconfig.co/json"
+
+def does_it_work(proxy: ProxyInfo) -> bool:
+    # Assumption: the Tor Project does not block proxies :)
+    t = get_url('https://www.torproject.org/', proxy)
+    if t is None:
+        return False
+    return 'Tor Project' in t
+
+
+def get_url(url: str, proxy: Optional[ProxyInfo] = None) -> Optional[str]:
     try:
         proxies: Optional[dict[str, str]] = None
         if proxy is not None:
             proto = proxy.protocol.lower()
 
             if proto in {"socks5", "socks4"}:
-                scheme = proto
-            elif proto in {"http", "https"}:
-                scheme = proto
+                proxy_uri = f"{proto}://{proxy.ip}:{proxy.port}"
+                proxies = {"http": proxy_uri, "https": proxy_uri}
+            elif proto == "http":
+                proxy_uri = f"http://{proxy.ip}:{proxy.port}"
+                proxies = {"http": proxy_uri}
+            elif proto == 'https':
+                proxy_uri = f"https://{proxy.ip}:{proxy.port}"
+                proxies = {"https": proxy_uri}
             else:
                 raise ValueError(f"Unsupported proxy protocol: {proxy.protocol!r}")
-            proxy_uri = f"{scheme}://{proxy.ip}:{proxy.port}"
-            proxies = {"http": proxy_uri, "https": proxy_uri}
-
-        resp = requests.get(url, proxies=proxies, timeout=5)
+        resp = requests.get(url, proxies=proxies, timeout=16)
         if resp.ok:
-            return resp.json().get("country_iso")
-
+            return resp.text
     except Exception as exc:               # network errors, JSON errors, …
         eprint(exc)
     return None
-
 
 
 def _socks4_handshake(sock: socket.socket) -> bool:
@@ -118,17 +121,16 @@ def test_proxy(proxy: ProxyInfo) -> ProxyInfo:
         "http":   _http_probe,
         "https":  _http_probe,      # HTTPS proxies behave the same for CONNECT
     }
-
     handshake = handlers.get(proxy.protocol.lower())
     if handshake is None:
         raise ValueError(f"Unsupported proxy protocol: {proxy.protocol!r}")
 
     try:
-        with socket.create_connection((proxy.ip, int(proxy.port)), timeout=5) as sock:
+        with socket.create_connection((proxy.ip, int(proxy.port)), timeout=8) as sock:
             start = time.time()
             if handshake(sock):
                 proxy.ping = time.time() - start
-                proxy.geo_service = geolocation_service(proxy)
+                proxy.works = does_it_work(proxy)
     except (socket.timeout, ConnectionError, OSError):
         pass
     return proxy
@@ -160,7 +162,7 @@ def parse_data() -> List[ProxyInfo]:
             score=item['score'],
             ping=float('inf'),
             geolocation=geo,
-            geo_service=None
+            works=False
         )
         proxy_list.append(proxy)
     return proxy_list
@@ -173,7 +175,7 @@ def main():
 
     with multiprocessing.Pool() as pool:
         results: List[ProxyInfo] = list(tqdm(pool.imap(test_proxy, data), total=len(data)))
-    results = [r for r in results if r.ping != float('inf')]
+    results = [r for r in results if r.works and r.ping != float('inf')]
     results.sort(key=lambda x: x.ping)
     print(f'Found {len(results)} working proxies:')
     for p in results:
