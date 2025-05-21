@@ -22,5 +22,9 @@ def ProxyInfo_builder(ip: str, port: int, protocol: str) -> ProxyInfo:
 
 if __name__ == '__main__':
     pi = ProxyInfo_builder('127.0.0.1', 8080, 'http')
-    res = get_url('https://www.example.com/', pi)
-    print(res)
+    assert pi.works
+    test_url = 'https://ifconfig.co/json'
+    res = get_url(test_url, pi)
+    print('> With proxy:', res)
+    res = get_url(test_url)
+    print('> Without proxy:', res)

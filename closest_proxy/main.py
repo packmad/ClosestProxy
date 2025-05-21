@@ -38,18 +38,16 @@ class ProxyInfo:
 
 
 def get_url(url: str, proxy: Optional[ProxyInfo] = None) -> Optional[str]:
+    if not url.startswith('http'):
+        eprint(f'ERROR: Only HTTP(S) URLs are supported! "{url}"')
+        return None
     try:
         proxies: Optional[dict[str, str]] = None
         if proxy is not None:
             proto = proxy.protocol.lower()
-
-            if proto in {"socks5", "socks4"}:
+            if proto in {"socks5", "socks4", "http", "https"}:
                 proxy_uri = f"{proto}://{proxy.ip}:{proxy.port}"
                 proxies = {"http": proxy_uri, "https": proxy_uri}
-            elif proto == "http":
-                proxies = {"http": f"http://{proxy.ip}:{proxy.port}"}
-            elif proto == 'https':
-                proxies = {"https": f"https://{proxy.ip}:{proxy.port}"}
             else:
                 raise ValueError(f"Unsupported proxy protocol: {proxy.protocol!r}")
         resp = requests.get(url, proxies=proxies, timeout=16)
@@ -154,6 +152,9 @@ def parse_data() -> List[ProxyInfo]:
     raw_list = get_data()
     proxy_list: List[ProxyInfo] = list()
     for item in raw_list:
+        if item['protocol'] == 'http' and not item['https']:
+            # => proxy does not allow CONNECT tunnel
+            continue  # We want encryption!
         proxy = ProxyInfo(
             proxy=item['proxy'],
             protocol=item['protocol'],
