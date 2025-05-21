@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from ipaddress import ip_network
 from typing import List, Optional, Dict, Set
 from tqdm import tqdm
-from pathlib import Path
 from os.path import join, isfile
 
 
@@ -48,11 +47,9 @@ def get_url(url: str, proxy: Optional[ProxyInfo] = None) -> Optional[str]:
                 proxy_uri = f"{proto}://{proxy.ip}:{proxy.port}"
                 proxies = {"http": proxy_uri, "https": proxy_uri}
             elif proto == "http":
-                proxy_uri = f"http://{proxy.ip}:{proxy.port}"
-                proxies = {"http": proxy_uri}
+                proxies = {"http": f"http://{proxy.ip}:{proxy.port}"}
             elif proto == 'https':
-                proxy_uri = f"https://{proxy.ip}:{proxy.port}"
-                proxies = {"https": proxy_uri}
+                proxies = {"https": f"https://{proxy.ip}:{proxy.port}"}
             else:
                 raise ValueError(f"Unsupported proxy protocol: {proxy.protocol!r}")
         resp = requests.get(url, proxies=proxies, timeout=16)
